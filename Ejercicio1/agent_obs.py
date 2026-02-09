@@ -26,7 +26,7 @@ from count_invocation_plugin import CountInvocationPlugin
 
 print("✅ ADK components imported successfully.")
 
-os.environ["GOOGLE_API_KEY"] = "AIzaSyBtt2hhxUnG9Gr5cVV534hZbrysgo2IX9o"
+os.environ["GOOGLE_API_KEY"] = "AIzaSyCiOS_F56hzvWrYTMfIT5bdydSqokob1sE"
 
 print("✅ Gemini API key setup complete.")
 
@@ -145,12 +145,62 @@ print("🔧 Available tools:")
 print("  • get_fee_for_payment_method - Looks up company fee structure")
 print("  • get_exchange_rate - Gets current exchange rates")
 
+# Create calculation agent that uses code execution ---------------------------------------------
+calculation_agent = LlmAgent(
+    name="calculation_agent",
+    model=Gemini(model="gemini-2.5-flash-lite", retry_options=retry_config),
+    description="Generates and executes Python code to perform calculations",
+    instruction=(
+        "You are a Python calculation expert.\n\n"
+        "When given calculation requirements:\n"
+        "1. Generate clean, executable Python code\n"
+        "2. The code should perform the requested calculations\n"
+        "3. Always print the final result\n"
+        "4. Use clear variable names\n\n"
+        "Example: If asked to calculate final amount after 2 percent fee on $500 and convert at rate 0.93:\n"
+        "Create code that: calculates original times fee rate, subtracts fee from original, multiplies result by exchange rate, and prints the final amount."
+    ),
+    code_executor=BuiltInCodeExecutor(),
+)
+
+print("✅ Calculation agent created with code execution capability")
+
+# Enhanced currency agent that uses calculation_agent as a tool -------------------------------
+enhanced_currency_agent = LlmAgent(
+    name="enhanced_currency_agent",
+    model=Gemini(model="gemini-2.5-flash-lite", retry_options=retry_config),
+    instruction=(
+        "You are a smart currency conversion assistant. You must strictly follow these steps and use the available tools.\n\n"
+        "For any currency conversion request:\n"
+        "1. Get Transaction Fee: Use the get_fee_for_payment_method() tool to determine the transaction fee.\n"
+        "2. Get Exchange Rate: Use the get_exchange_rate() tool to get the currency conversion rate.\n"
+        "3. Error Check: After each tool call, you must check the status field in the response. If the status is error, you must stop and clearly explain the issue to the user.\n"
+        "4. Calculate Final Amount (CRITICAL): You are strictly prohibited from performing any arithmetic calculations yourself. You must use the calculation_agent tool to generate Python code that calculates the converted amount. This code will use the fee information from step 1 and the exchange rate from step 2.\n"
+        "5. Provide Detailed Breakdown: In your summary, you must state the converted amount and explain how the result was calculated, including the fee percentage and the fee amount in the original currency, the amount remaining after deducting the fee, and the exchange rate applied."
+    ),
+    tools=[
+        get_fee_for_payment_method,
+        get_exchange_rate,
+        AgentTool(agent=calculation_agent),  # Using another agent as a tool!
+    ],
+)
+
+print("✅ Enhanced currency agent created with calculation agent as tool")
+print("🔧 Enhanced agent tools:")
+print("  • get_fee_for_payment_method - Looks up company fee structure")
+print("  • get_exchange_rate - Gets current exchange rates")
+print("  • calculation_agent - Generates and executes Python code for calculations")
+
 # Test the currency agent with LoggingPlugin for observability ------------------------------------------------
 if __name__ == "__main__":
     import asyncio
 
     async def main():
-        # Initialize runner with LoggingPlugin and CountInvocationPlugin for observability
+        # Test the original currency_agent
+        print("\n" + "="*80)
+        print("Testing ORIGINAL currency_agent")
+        print("="*80 + "\n")
+        
         currency_runner = InMemoryRunner(
             agent=currency_agent,
             plugins=[LoggingPlugin(), CountInvocationPlugin()],
@@ -159,6 +209,22 @@ if __name__ == "__main__":
         print("📈 CountInvocationPlugin enabled for call tracking")
         
         _ = await currency_runner.run_debug(
+            "I want to convert 500 US Dollars to Euros using my Platinum Credit Card. How much will I receive?"
+        )
+        
+        # Test the enhanced currency_agent with calculation_agent
+        print("\n" + "="*80)
+        print("Testing ENHANCED currency_agent (with calculation_agent)")
+        print("="*80 + "\n")
+        
+        enhanced_runner = InMemoryRunner(
+            agent=enhanced_currency_agent,
+            plugins=[LoggingPlugin(), CountInvocationPlugin()],
+        )
+        print("📊 LoggingPlugin enabled for observability")
+        print("📈 CountInvocationPlugin enabled for call tracking")
+        
+        _ = await enhanced_runner.run_debug(
             "I want to convert 500 US Dollars to Euros using my Platinum Credit Card. How much will I receive?"
         )
 
