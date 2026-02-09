@@ -19,6 +19,11 @@ from google.adk.code_executors import BuiltInCodeExecutor
 
 print("✅ ADK components imported successfully.")
 
+#Código añadido para ejercicio 1,2
+os.environ["GOOGLE_API_KEY"] = "AIzaSyBtt2hhxUnG9Gr5cVV534hZbrysgo2IX9o"
+
+print("✅ Gemini API key setup complete.")
+
 # Configure HTTP retry options for API calls ------------------------------------------------
 retry_config = types.HttpRetryOptions(
     attempts=5,  # Maximum retry attempts
